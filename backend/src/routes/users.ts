@@ -2,13 +2,15 @@ import { Router, Request, Response } from "express";
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import UserModel from "../db";
-import { Keypair } from "@solana/web3.js";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import bs58 from 'bs58';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from "../config";
+import auth from '../middleware/auth'
 
 const userRouter = Router();
 
+//signup
 userRouter.post('/signup', async (req: Request, res: Response) : Promise<any> => {
     const reqBody = z.object({
         email: z.string().email(),
@@ -54,6 +56,7 @@ userRouter.post('/signup', async (req: Request, res: Response) : Promise<any> =>
     }
 });
 
+//signin
 userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => {
     const reqBody = z.object({
         email: z.string().email(),
@@ -95,6 +98,70 @@ userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => 
         console.error(e);
         return res.status(500).json({ msg: "Server error during signin" });
     }
+});
+
+//airdrop SOL
+userRouter.post("/airdrop", auth, async (req: Request, res: Response):Promise<any> => {
+  const { publicKey, amount } = req.body;
+  if (!publicKey || !amount) {
+    return res.status(400).json({ msg: "Public key and amount are required" });
+  }
+
+  try {
+    const lamports = Number(amount) * 1e9; 
+    if (isNaN(lamports) || lamports <= 0) {
+      return res.status(400).json({ msg: "Invalid amount" });
+    }
+    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+    const signature = await connection.requestAirdrop(new PublicKey(publicKey), lamports);
+    await connection.confirmTransaction(signature, "confirmed");
+
+    return res.json({ msg: "Airdrop successful", signature });
+  } catch (e: any) {
+    return res.status(500).json({ msg: "Airdrop failed", error: e.message });
+  }
+});
+
+
+
+//Send SOL
+interface AuthRequest extends Request {
+  user?: any;
+}
+
+userRouter.post("/transfer", auth, async (req: AuthRequest, res: Response):Promise<any> => {
+  const { toAddress, amount } = req.body;
+
+  if (!toAddress || !amount || isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ msg: "Invalid 'to' address or amount" });
+  }
+
+  try {
+    const userId = req.user.userId;
+    const user = await UserModel.findOne({
+        _id : userId
+    });
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+    const secretKey = bs58.decode(user.privateKey);
+    const senderKeypair = Keypair.fromSecretKey(secretKey);
+    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderKeypair.publicKey,
+        toPubkey: new PublicKey(toAddress),
+        lamports: amount * LAMPORTS_PER_SOL,
+      })
+    );
+
+    const signature = await connection.sendTransaction(transaction, [senderKeypair]);
+    await connection.confirmTransaction(signature, "confirmed");
+
+    res.json({ msg: "Transfer successful", signature });
+  } catch (e: any) {
+    res.status(500).json({ msg: "Transfer failed", error: e.message });
+  }
 });
 
 
