@@ -45,3 +45,10 @@ cd backend
 npm install
 npx tsc -b
 node dist/server.js
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
