@@ -6,12 +6,17 @@ import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transa
 import bs58 from 'bs58';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from "../config";
-import auth from '../middleware/auth'
+import auth from '../middleware/auth';
+//@ts-ignore
+import sss from 'shamirs-secret-sharing';
+import { Buffer } from 'buffer';
+import { MongoClient } from 'mongodb';
 
 const userRouter = Router();
+const mongo = new MongoClient("mongodb://localhost:27017");
 
 //signup
-userRouter.post('/signup', async (req: Request, res: Response) : Promise<any> => {
+userRouter.post('/signup', async (req: Request, res: Response): Promise<any> => {
     const reqBody = z.object({
         email: z.string().email(),
         password: z.string()
@@ -20,8 +25,8 @@ userRouter.post('/signup', async (req: Request, res: Response) : Promise<any> =>
     const parsedBody = reqBody.safeParse(req.body);
     if (!parsedBody.success) {
         return res.status(400).json({
-            msg : "Inavalid Input format"
-        })
+            msg: "Invalid Input format"
+        });
     }
 
     const { email, password } = parsedBody.data;
@@ -33,22 +38,35 @@ userRouter.post('/signup', async (req: Request, res: Response) : Promise<any> =>
 
     const keypair = Keypair.generate();
     const publicKey = keypair.publicKey.toBase58();
-    const privateKey = bs58.encode(keypair.secretKey);
-
+    const privateKey = keypair.secretKey;
+    const privateKeyHex = Buffer.from(privateKey).toString('hex');
+    const shares = sss.split(Buffer.from(privateKeyHex, 'hex'), { shares: 3, threshold: 2 });
     const hashedPassword = await bcrypt.hash(password, 5);
 
     try {
-        await UserModel.create({
+        const user = await UserModel.create({
             email,
             password: hashedPassword,
-            publicKey,
-            privateKey 
+            publicKey
         });
+
+        await mongo.connect();
+        const db = mongo.db("wallets");
+        const collection = db.collection("keyShares");
+
+        const insertOps = shares.map((share: Buffer, index: number) => ({
+          //@ts-ignore
+            userId: user._id.toString(),
+            shareId: index + 1,
+            share: share.toString('hex'),
+        }));
+
+        await collection.insertMany(insertOps);
+        await mongo.close();
 
         return res.json({
             msg: "Signup successful!",
             publicKey
-            //privatekey
         });
     } catch (e) {
         console.error(e);
@@ -81,6 +99,17 @@ userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => 
             return res.status(401).json({ msg: "Incorrect password" });
         }
 
+        await mongo.connect();
+        const db = mongo.db("wallets");
+        const collection = db.collection("keyShares");
+        //@ts-ignore
+        const shares = await collection.find({ userId: user._id.toString() }).toArray();
+        await mongo.close();
+
+        const shareBuffers = shares.slice(0, 2).map(share => Buffer.from(share.share, 'hex'));
+        const reconstructedKey = sss.combine(shareBuffers);
+        const privateKey = bs58.encode(reconstructedKey);
+
         const token = jwt.sign(
             { userId: user._id, email: user.email },
             JWT_SECRET as string,
@@ -91,7 +120,7 @@ userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => 
             msg: "Signin successful",
             token,
             solanaPublicKey: user.publicKey,
-            solanaPrivateKey: user.privateKey 
+            solanaPrivateKey: privateKey
         });
 
     } catch (e) {
@@ -101,68 +130,71 @@ userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => 
 });
 
 //airdrop SOL
-userRouter.post("/airdrop", auth, async (req: Request, res: Response):Promise<any> => {
-  const { publicKey, amount } = req.body;
-  if (!publicKey || !amount) {
-    return res.status(400).json({ msg: "Public key and amount are required" });
-  }
-
-  try {
-    const lamports = Number(amount) * 1e9; 
-    if (isNaN(lamports) || lamports <= 0) {
-      return res.status(400).json({ msg: "Invalid amount" });
+userRouter.post("/airdrop", auth, async (req: Request, res: Response): Promise<any> => {
+    const { publicKey, amount } = req.body;
+    if (!publicKey || !amount) {
+        return res.status(400).json({ msg: "Public key and amount are required" });
     }
-    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-    const signature = await connection.requestAirdrop(new PublicKey(publicKey), lamports);
-    await connection.confirmTransaction(signature, "confirmed");
 
-    return res.json({ msg: "Airdrop successful", signature });
-  } catch (e: any) {
-    return res.status(500).json({ msg: "Airdrop failed", error: e.message });
-  }
+    try {
+        const lamports = Number(amount) * 1e9;
+        if (isNaN(lamports) || lamports <= 0) {
+            return res.status(400).json({ msg: "Invalid amount" });
+        }
+        const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+        const signature = await connection.requestAirdrop(new PublicKey(publicKey), lamports);
+        await connection.confirmTransaction(signature, "confirmed");
+
+        return res.json({ msg: "Airdrop successful", signature });
+    } catch (e: any) {
+        return res.status(500).json({ msg: "Airdrop failed", error: e.message });
+    }
 });
-
-
 
 //Send SOL
 interface AuthRequest extends Request {
-  user?: any;
+    user?: any;
 }
 
-userRouter.post("/transfer", auth, async (req: AuthRequest, res: Response):Promise<any> => {
-  const { toAddress, amount } = req.body;
+userRouter.post("/transfer", auth, async (req: AuthRequest, res: Response): Promise<any> => {
+    const { toAddress, amount } = req.body;
 
-  if (!toAddress || !amount || isNaN(amount) || amount <= 0) {
-    return res.status(400).json({ msg: "Invalid 'to' address or amount" });
-  }
-
-  try {
-    const userId = req.user.userId;
-    const user = await UserModel.findOne({
-        _id : userId
-    });
-    if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+    if (!toAddress || !amount || isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ msg: "Invalid 'to' address or amount" });
     }
-    const secretKey = bs58.decode(user.privateKey);
-    const senderKeypair = Keypair.fromSecretKey(secretKey);
-    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: senderKeypair.publicKey,
-        toPubkey: new PublicKey(toAddress),
-        lamports: amount * LAMPORTS_PER_SOL,
-      })
-    );
 
-    const signature = await connection.sendTransaction(transaction, [senderKeypair]);
-    await connection.confirmTransaction(signature, "confirmed");
+    try {
+        const userId = req.user.userId;
+        const user = await UserModel.findOne({ _id: userId });
+        if (!user) {
+            return res.status(404).json({ msg: "User not found" });
+        }
+        await mongo.connect();
+        const db = mongo.db("wallets");
+        const collection = db.collection("keyShares");
+        const shares = await collection.find({ userId: userId }).toArray();
+        await mongo.close();
+        const shareBuffers = shares.slice(0, 2).map(share => Buffer.from(share.share, 'hex'));
+        const reconstructedKey = sss.combine(shareBuffers);
+        const secretKey = reconstructedKey;
 
-    res.json({ msg: "Transfer successful", signature });
-  } catch (e: any) {
-    res.status(500).json({ msg: "Transfer failed", error: e.message });
-  }
+        const senderKeypair = Keypair.fromSecretKey(secretKey);
+        const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: senderKeypair.publicKey,
+                toPubkey: new PublicKey(toAddress),
+                lamports: amount * LAMPORTS_PER_SOL,
+            })
+        );
+
+        const signature = await connection.sendTransaction(transaction, [senderKeypair]);
+        await connection.confirmTransaction(signature, "confirmed");
+
+        res.json({ msg: "Transfer successful", signature });
+    } catch (e: any) {
+        res.status(500).json({ msg: "Transfer failed", error: e.message });
+    }
 });
-
 
 export { userRouter };
