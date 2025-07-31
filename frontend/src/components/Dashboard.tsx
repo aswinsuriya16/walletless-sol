@@ -13,6 +13,8 @@ const Dashboard = ({ token }: DashboardProps) => {
   const [airdropAmount, setAirdropAmount] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isTransferLoading, setIsTransferLoading] = useState(false);
+  const [isAirdropLoading, setIsAirdropLoading] = useState(false);
 
   useEffect(() => {
     const storedPublicKey = localStorage.getItem('solanaPublicKey');
@@ -25,6 +27,7 @@ const Dashboard = ({ token }: DashboardProps) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setIsTransferLoading(true);
 
     try {
       const response = await api.post(
@@ -45,6 +48,8 @@ const Dashboard = ({ token }: DashboardProps) => {
       setTransferTo('');
     } catch (err: any) {
       setError(err.response?.data?.msg || 'Transfer failed');
+    } finally {
+      setIsTransferLoading(false);
     }
   };
 
@@ -52,6 +57,7 @@ const Dashboard = ({ token }: DashboardProps) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setIsAirdropLoading(true);
 
     try {
       const response = await api.post(
@@ -71,93 +77,151 @@ const Dashboard = ({ token }: DashboardProps) => {
       setAirdropAmount('');
     } catch (err: any) {
       setError(err.response?.data?.msg || 'Airdrop failed');
+    } finally {
+      setIsAirdropLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-xl p-8 mb-8">
-        <h2 className="text-3xl font-bold mb-6 text-gray-900">WALLET INFORMATION</h2>
-        <div className="mb-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">Public Key:</p>
-          <p className="font-mono bg-gray-50 p-4 rounded-md break-all text-gray-900 border border-gray-200">
-            {publicKey}
-          </p>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded">
-          {success}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <h3 className="text-2xl font-bold mb-6 text-gray-900">TRANSFER SOL</h3>
-          <form onSubmit={handleTransfer} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                To Address
-              </label>
-              <input
-                type="text"
-                value={transferTo}
-                onChange={(e) => setTransferTo(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-colors"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Amount (SOL)
-              </label>
-              <input
-                type="number"
-                step="0.000000001"
-                value={transferAmount}
-                onChange={(e) => setTransferAmount(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-colors"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-black text-white py-3 px-4 rounded-md hover:bg-gray-900 transition-colors duration-200 font-medium"
-            >
-              TRANSFER
-            </button>
-          </form>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-100 mb-2">Wallet Dashboard</h1>
+          <p className="text-gray-400">Manage your Solana wallet and transactions</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <h3 className="text-2xl font-bold mb-6 text-gray-900">REQUEST AIRDROP</h3>
-          <form onSubmit={handleAirdrop} className="space-y-6">
+        {/* Wallet Info Card */}
+        <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-8 mb-8 border border-gray-700/50 shadow-2xl">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-100">Wallet Information</h2>
+            <p className="text-gray-400">Your Solana wallet details</p>
+          </div>
+          
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Amount (SOL)
-              </label>
-              <input
-                type="number"
-                step="0.000000001"
-                value={airdropAmount}
-                onChange={(e) => setAirdropAmount(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-colors"
-                required
-              />
+              <label className="block text-sm font-medium text-gray-300 mb-2">Public Key:</label>
+              <div className="bg-gray-700/50 border border-gray-600 rounded-xl p-4">
+                <p className="font-mono text-gray-100 break-all text-sm">
+                  {publicKey || 'Loading...'}
+                </p>
+              </div>
             </div>
-            <button
-              type="submit"
-              className="w-full bg-black text-white py-3 px-4 rounded-md hover:bg-gray-900 transition-colors duration-200 font-medium"
-            >
-              REQUEST AIRDROP
-            </button>
-          </form>
+            
+            {balance !== null && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Balance:</label>
+                <div className="bg-gray-700/50 border border-gray-600 rounded-xl p-4">
+                  <p className="text-gray-100 font-semibold text-lg">
+                    {balance} SOL
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Notifications */}
+        {error && (
+          <div className="bg-red-900/30 border border-red-700/50 text-red-300 p-4 mb-6 rounded-xl">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-900/30 border border-green-700/50 text-green-300 p-4 mb-6 rounded-xl">
+            {success}
+          </div>
+        )}
+
+        {/* Action Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Transfer Card */}
+          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-8 border border-gray-700/50 shadow-2xl">
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-gray-100">Transfer SOL</h3>
+              <p className="text-gray-400">Send SOL to another wallet</p>
+            </div>
+            
+            <form onSubmit={handleTransfer} className="space-y-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">To Address</label>
+                <input
+                  type="text"
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                  className="w-full px-4 py-4 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
+                  placeholder="Enter recipient address"
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">Amount (SOL)</label>
+                <input
+                  type="number"
+                  step="0.000000001"
+                  value={transferAmount}
+                  onChange={(e) => setTransferAmount(e.target.value)}
+                  className="w-full px-4 py-4 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
+                  placeholder="0.0"
+                  required
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={isTransferLoading}
+                className="w-full bg-gradient-to-r from-gray-700 to-gray-800 text-gray-100 py-4 px-6 rounded-xl font-semibold hover:from-gray-600 hover:to-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-gray-600"
+              >
+                {isTransferLoading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Processing...</span>
+                  </div>
+                ) : (
+                  'Transfer SOL'
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Airdrop Card */}
+          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-8 border border-gray-700/50 shadow-2xl">
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-gray-100">Request Airdrop</h3>
+              <p className="text-gray-400">Get test SOL from faucet</p>
+            </div>
+            
+            <form onSubmit={handleAirdrop} className="space-y-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-300">Amount (SOL)</label>
+                <input
+                  type="number"
+                  step="0.000000001"
+                  value={airdropAmount}
+                  onChange={(e) => setAirdropAmount(e.target.value)}
+                  className="w-full px-4 py-4 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
+                  placeholder="0.0"
+                  required
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={isAirdropLoading}
+                className="w-full bg-gradient-to-r from-gray-700 to-gray-800 text-gray-100 py-4 px-6 rounded-xl font-semibold hover:from-gray-600 hover:to-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-gray-600"
+              >
+                {isAirdropLoading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Processing...</span>
+                  </div>
+                ) : (
+                  'Request Airdrop'
+                )}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

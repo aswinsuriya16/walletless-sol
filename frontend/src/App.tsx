@@ -25,16 +25,14 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-[#f5f5f5]">
+      <div className="min-h-screen">
         <Navbar isAuthenticated={isAuthenticated} onLogout={handleLogout} />
-        <div className="container mx-auto px-4 py-8">
-          <Routes>
-            <Route path="/signin" element={!isAuthenticated ? <SignIn setIsAuthenticated={setIsAuthenticated} setToken={setToken} /> : <Navigate to="/dashboard" />} />
-            <Route path="/signup" element={!isAuthenticated ? <SignUp /> : <Navigate to="/dashboard" />} />
-            <Route path="/dashboard" element={isAuthenticated ? <Dashboard token={token} /> : <Navigate to="/signin" />} />
-            <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/signin"} />} />
-          </Routes>
-        </div>
+        <Routes>
+          <Route path="/signin" element={!isAuthenticated ? <SignIn setIsAuthenticated={setIsAuthenticated} setToken={setToken} /> : <Navigate to="/dashboard" />} />
+          <Route path="/signup" element={!isAuthenticated ? <SignUp /> : <Navigate to="/dashboard" />} />
+          <Route path="/dashboard" element={isAuthenticated ? <Dashboard token={token} /> : <Navigate to="/signin" />} />
+          <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/signin"} />} />
+        </Routes>
       </div>
     </Router>
   );
