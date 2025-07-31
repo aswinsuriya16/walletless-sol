@@ -1,54 +1,34 @@
-# 🔐 Solana Wallet-less App
+🔐 Solana Wallet-less App
+A secure, backend-focused Solana application enabling users to interact with the Solana blockchain without requiring browser wallets like Phantom or Backpack. The backend leverages Shamir's Secret Sharing to securely manage and reconstruct private keys, ensuring robust security and seamless user experience.
+🚀 Features
 
-A full-stack Solana-based application that allows users to interact with the blockchain **without a browser wallet like Phantom or Backpack**.
+🪪 User Authentication: Secure signup and signin with JWT-based authentication.
+🔑 Server-Managed Solana Keypairs: Generate and store Solana keypairs on the server, eliminating the need for browser extensions.
+🔐 Shamir's Secret Sharing: Split private keys into shares with a threshold for secure storage and reconstruction in MongoDB.
+💸 Devnet SOL Airdrops: Request SOL airdrops directly from the Solana Devnet.
+🔁 SOL Transfers: Transfer SOL to other addresses securely via server-side transactions.
+⚡️ Wallet-less Experience: Interact with the Solana blockchain without Phantom or browser extensions.
 
-Users can:
-- 🔑 Sign up and get a Solana keypair
-- 🔐 Log in securely using JWT
-- 💸 Request SOL airdrops from Devnet
-- 🔁 Transfer SOL to others
-- ⚡️ Use the app without Phantom or browser extensions
+📦 Tech Stack
+Backend
 
----
+Node.js + Express: Robust server framework for handling API requests.
+TypeScript: Type-safe development for reliability and maintainability.
+MongoDB + Mongoose: Database for storing user data and key shares.
+@solana/web3.js: Solana blockchain interactions for keypair generation, airdrops, and transfers.
+Shamir's Secret Sharing (sss): Securely splits and reconstructs private keys.
+jsonwebtoken: Secure JWT-based authentication.
+bcrypt: Password hashing for secure storage.
+bs58: Base58 encoding for Solana keys.
 
-## 🚀 Features
+Frontend
 
-- 🪪 User authentication (signup/signin)
-- 🔑 Solana keypair generated and managed by server
-- 💸 Airdrop request functionality
-- 🔁 Transfer SOL to other addresses
-- 🌐 Built with **TypeScript**, **Express**, **React**, and **MongoDB**
+React: Dynamic, component-based UI.
+TailwindCSS: Modern, utility-first styling for a responsive interface.
 
----
+🔐 Security Highlights
 
-## 📦 Tech Stack
-
-### Backend:
-- Node.js + Express
-- TypeScript
-- MongoDB + Mongoose
-- @solana/web3.js
-- jsonwebtoken
-
-### Frontend:
-- React
-- TailwindCSS 
-
----
-
-## ⚙️ Setup Instructions
-
-### 🔧 Backend
-
-```bash
-cd backend
-npm install
-npx tsc -b
-node dist/server.js
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
+Shamir's Secret Sharing: Private keys are split into three shares with a threshold of two, stored securely in MongoDB. Only two shares are needed to reconstruct the key during signin or transfers, enhancing security.
+JWT Authentication: Protects routes like airdrop and transfer, ensuring only authenticated users can access sensitive operations.
+Password Hashing: Uses bcrypt to securely hash passwords before storage.
+Mongoose Validation: Ensures data integrity with strict schemas for users and key shares.
