@@ -10,10 +10,18 @@ import auth from '../middleware/auth';
 //@ts-ignore
 import sss from 'shamirs-secret-sharing';
 import { Buffer } from 'buffer';
-import { MongoClient } from 'mongodb';
+import { Schema, model } from 'mongoose';
+
+// Define Mongoose schema for key shares
+const KeyShareSchema = new Schema({
+    userId: { type: String, required: true },
+    shareId: { type: Number, required: true },
+    share: { type: String, required: true }
+});
+
+const KeyShareModel = model('KeyShare', KeyShareSchema);
 
 const userRouter = Router();
-const mongo = new MongoClient("mongodb://localhost:27017");
 
 //signup
 userRouter.post('/signup', async (req: Request, res: Response): Promise<any> => {
@@ -50,19 +58,14 @@ userRouter.post('/signup', async (req: Request, res: Response): Promise<any> => 
             publicKey
         });
 
-        await mongo.connect();
-        const db = mongo.db("wallets");
-        const collection = db.collection("keyShares");
-
         const insertOps = shares.map((share: Buffer, index: number) => ({
-          //@ts-ignore
+            //@ts-ignore
             userId: user._id.toString(),
             shareId: index + 1,
             share: share.toString('hex'),
         }));
 
-        await collection.insertMany(insertOps);
-        await mongo.close();
+        await KeyShareModel.insertMany(insertOps);
 
         return res.json({
             msg: "Signup successful!",
@@ -98,14 +101,9 @@ userRouter.post('/signin', async (req: Request, res: Response): Promise<any> => 
         if (!isMatch) {
             return res.status(401).json({ msg: "Incorrect password" });
         }
-
-        await mongo.connect();
-        const db = mongo.db("wallets");
-        const collection = db.collection("keyShares");
         //@ts-ignore
-        const shares = await collection.find({ userId: user._id.toString() }).toArray();
-        await mongo.close();
-
+        const shares = await KeyShareModel.find({ userId: user._id.toString() });
+        
         const shareBuffers = shares.slice(0, 2).map(share => Buffer.from(share.share, 'hex'));
         const reconstructedKey = sss.combine(shareBuffers);
         const privateKey = bs58.encode(reconstructedKey);
@@ -169,11 +167,7 @@ userRouter.post("/transfer", auth, async (req: AuthRequest, res: Response): Prom
         if (!user) {
             return res.status(404).json({ msg: "User not found" });
         }
-        await mongo.connect();
-        const db = mongo.db("wallets");
-        const collection = db.collection("keyShares");
-        const shares = await collection.find({ userId: userId }).toArray();
-        await mongo.close();
+        const shares = await KeyShareModel.find({ userId: userId });
         const shareBuffers = shares.slice(0, 2).map(share => Buffer.from(share.share, 'hex'));
         const reconstructedKey = sss.combine(shareBuffers);
         const secretKey = reconstructedKey;
